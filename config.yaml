@@ -1,0 +1,160 @@
+# =====================================================================
+#  CAZACHOLLOS · configuración editable
+#  Cambia aquí tus supuestos. No hace falta tocar el código.
+#  Los valores marcados "VERIFICAR" son estimaciones por defecto:
+#  confírmalos con tu gestor o la fuente oficial antes de fiarte.
+# =====================================================================
+
+yo:
+  provincia: "Madrid"          # dónde vives (para distancias)
+  comunidad_autonoma: "Madrid" # para el ITP
+  regimen: "particular"        # "particular" | "rebu" (si te das de alta como compraventa)
+
+busqueda:                      # filtros de lo que te interesa comprar
+  precio_min: 1500
+  precio_max: 15000
+  anio_min: 2008
+  km_max: 220000
+  radio_km: 300                # distancia máxima desde tu provincia (aprox. por carretera)
+  combustibles: []             # vacío = todos. Ej: ["diesel", "gasolina", "hibrido"]
+  cambios: []                  # vacío = todos. Ej: ["manual", "automatico"]
+  marcas_incluir: []           # vacío = todas
+  marcas_excluir: []
+  tipo_vendedor: ["particular", "profesional", "desconocido"]
+
+objetivos:
+  margen_minimo_eur: 1000      # beneficio neto mínimo por coche
+  roi_minimo: 0.10             # 10 % sobre lo invertido
+  dias_venta_estimados: 30     # lo que tardas en revender de media
+
+alertas:
+  score_minimo: 70             # solo te aviso a partir de esta puntuación
+  bloquear_si_alarma_grave: true
+  canales: ["telegram"]        # "telegram", "email"
+  resumen_diario_hora: "21:00"
+
+venta:                         # cómo pasamos de "precio anunciado" a "precio real de venta"
+  descuento_negociacion_venta: 0.06   # los compradores te regatearán ~6 % sobre el precio de mercado anunciado
+  usar_solo_profesionales_para_valorar: false
+
+compra:
+  descuento_negociacion_compra: 0.0   # pon 0.05 si sueles rebajar un 5 % al vendedor
+
+costes:                        # todo en euros
+  tasa_dgt_transferencia: 55.70       # tasa 1.5 DGT 2026 (fuente: gestoria247.com, todosobreautos.com)
+  gestoria: 60.0                      # si lo haces tú, pon 0
+  informe_dgt: 8.67                   # tasa 4.1 (informe completo)
+  informe_historial: 0.0              # pon el precio de carVertical u otro si lo usas en cada coche
+  itv_previa_venta: 45.0              # pasar ITV antes de vender si hace falta
+  limpieza_detailing: 120.0
+  fotos_y_anuncio: 30.0               # destacar anuncio, etc.
+  coste_km_desplazamiento: 0.20       # €/km en tu coche (ida y vuelta se calcula sola)
+  coste_retorno_si_lejos: 60.0        # tren/bus para volver si vas a por un coche lejano (>150 km)
+  coste_capital_anual: 0.06           # lo que te cuesta tener el dinero parado (interés/oportunidad)
+  seguro_dias_hasta_venta: 2.0        # €/día de seguro mientras lo tienes
+  provision_garantia_pct: 0.0         # si vendes como profesional, reserva p.ej. 0.03 (3 %) para garantías
+  colchon_imprevistos_pct: 0.03       # reserva para sorpresas sobre el precio de compra
+
+reparaciones:
+  base_por_antiguedad:                # revisión mínima (aceite, filtros, pastillas...) según años
+    "0-4": 150
+    "5-9": 300
+    "10-14": 450
+    "15-99": 650
+  extra_por_km_mas_de_150000: 250
+  palabras_clave:                     # si el anuncio dice esto, sumamos este coste estimado
+    "embrague": 650
+    "a reparar": 1500
+    "para reparar": 1500
+    "averiado": 1200
+    "averia": 900
+    "no arranca": 1500
+    "distribucion": 500
+    "correa": 400
+    "caja de cambios": 1500
+    "turbo": 900
+    "inyector": 600
+    "egr": 400
+    "fap": 600
+    "dpf": 600
+    "volante bimasa": 800
+    "golpe": 800
+    "chapa": 500
+    "neumaticos": 300
+    "ruedas gastadas": 300
+    "testigo": 300
+    "aire acondicionado no": 400
+    "climatizador no": 400
+    "fuga de aceite": 400
+    "humo": 700
+
+itp:
+  exento_si_profesional: true         # VERIFICAR con tu gestor: compraventas que compran para revender
+  tipo_por_defecto: 0.04              # VERIFICAR: depende de tu comunidad autónoma (4 %-8 %)
+  tipos_ccaa: {}                      # rellena cuando lo verifiquemos, p.ej. {"Madrid": 0.04}
+  # Porcentajes de depreciación sobre el precio medio de la tabla de Hacienda
+  # según años desde la primera matriculación. VERIFICAR contra la Orden HAC/1501/2025.
+  depreciacion_hacienda:
+    - [1, 1.00]
+    - [2, 0.84]
+    - [3, 0.67]
+    - [4, 0.56]
+    - [5, 0.47]
+    - [6, 0.39]
+    - [7, 0.34]
+    - [8, 0.28]
+    - [9, 0.24]
+    - [10, 0.19]
+    - [11, 0.17]
+    - [12, 0.13]
+    - [999, 0.10]
+  tabla_precios_csv: "data/hacienda/precios_medios_2026.csv"
+
+rebu:
+  iva: 0.21                           # en REBU pagas IVA solo sobre el margen
+
+valoracion:
+  min_comparables: 5
+  anios_tolerancia: 2
+  km_tolerancia_pct: 0.45
+  depreciacion_anual: 0.08            # usada cuando no hay datos suficientes para aprender la curva
+  depreciacion_por_10000km: 0.015
+  ventana_dias_comparables: 120
+
+alarmas:
+  precio_estafa_ratio: 0.55           # < 55 % del mercado = posible estafa
+  precio_sospechoso_ratio: 0.70
+  km_anuales_min: 3000                # menos en un coche de >5 años = posibles km bajados
+  km_anuales_max: 45000
+  fotos_minimas: 3
+
+fuentes:
+  email_alertas:
+    activo: false                     # se activa cuando configures el correo (ver README)
+    carpeta: "INBOX"
+    solo_no_leidos: true
+    remitentes: []                    # vacío = todos. Ej: ["pricauto", "trovit", "coches.net", "wallapop"]
+  enriquecer_paginas:
+    activo: false                     # abrir la página del anuncio para completar datos (respeta robots.txt)
+    pausa_segundos: 8
+    user_agent: "CazachollosPersonal/1.0 (uso personal; contacto: tu-email@ejemplo.com)"
+  importar_ficheros:
+    carpeta: "data/entrada"           # deja aquí CSV/JSON exportados (Pricauto, Apify...) y se importan solos
+  demo:
+    activo: false
+
+vision:
+  activo: false                       # cuesta dinero (API de Claude): actívalo cuando lo apruebes
+  modelo: "claude-sonnet-5-5"
+  max_fotos: 4
+  solo_si_score_mayor_que: 60         # solo gastamos en coches que ya pintan bien
+
+duplicados:
+  km_tolerancia: 2500
+  precio_tolerancia_pct: 0.15
+  similitud_texto: 0.85
+  distancia_hash_foto: 6
+
+panel:
+  host: "127.0.0.1"
+  puerto: 8765
