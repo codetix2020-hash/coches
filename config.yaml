@@ -20,7 +20,10 @@ inversor:
   max_km_sin_hotel: 400        # más de 400 km → contar hotel
   coste_hotel: 80              # € por noche de hotel
   presupuesto_max: 15000       # € máximo a desembolsar por un coche
-  coste_importacion_de: 1800   # coste estimado de importar desde Alemania (vuelo+tren+reregistro)
+  # Costes DE calculados por coche (impuesto matriculación calculado según CO2 de cada coche)
+  coste_transporte_de: 650     # vuelo BCN→DE + tren de regreso, o camión portacoches
+  coste_itv_importacion: 350   # ITV de importación + homologación (luces, cuentakilómetros)
+  coste_gestoria_importacion: 300  # gestoría importación (más cara que transferencia normal)
 
 busqueda:                      # filtros de lo que te interesa comprar
   precio_min: 1500

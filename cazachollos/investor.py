@@ -2,13 +2,20 @@
 
 Calcula si un coche merece el desplazamiento desde la base del inversor.
 Configuración en config.yaml → inversor:
-  base: "Barcelona"          # ciudad/provincia de origen
-  coste_km: 0.19             # €/km (combustible + desgaste)
-  valor_hora: 25             # €/hora (coste de oportunidad)
-  margen_minimo_viaje: 1500  # € de margen mínimo para que el viaje valga
-  max_km_sin_hotel: 400      # km máximos sin necesitar hotel
-  coste_hotel: 80            # € por noche de hotel
-  presupuesto_max: 15000     # € máximo a pagar por un coche
+  base: "Barcelona"                # ciudad/provincia de origen
+  coste_km: 0.19                   # €/km (combustible + desgaste)
+  valor_hora: 25                   # €/hora (coste de oportunidad)
+  margen_minimo_viaje: 1500        # € de margen mínimo para que el viaje valga
+  max_km_sin_hotel: 400            # km máximos sin necesitar hotel
+  coste_hotel: 80                  # € por noche de hotel
+  presupuesto_max: 15000           # € máximo a pagar por un coche
+
+  # Alemania (costes calculados por coche, no fijos):
+  coste_transporte_de: 650         # transporte DEfault (vuelo+tren de regreso o camión)
+  coste_itv_importacion: 350       # ITV de importación + homologación
+  coste_gestoria_importacion: 300  # gestoría (extra por importación vs transferencia normal)
+  # Impuesto de matriculación: se calcula según CO2 g/km (Ley 38/1992)
+  # ITP: se usa itp.tipo_por_defecto de config.yaml (Catalunya = 5%)
 """
 
 from __future__ import annotations
@@ -59,6 +66,7 @@ def trip_analysis(
     margin: float | None,
     cfg,
     destination_country: str = "ES",
+    listing=None,
 ) -> TripAnalysis | None:
     """Calcula el análisis del viaje para ir a comprar un coche.
 
@@ -79,9 +87,9 @@ def trip_analysis(
     max_km_hotel = float(inv_cfg.get("max_km_sin_hotel", 400.0))
     coste_hotel = float(inv_cfg.get("coste_hotel", 80.0))
 
-    # Para Alemania: coste fijo aproximado del viaje
+    # Para Alemania: costes calculados por coche
     if destination_country == "DE":
-        return _german_trip_analysis(base, destination_province, margin, inv_cfg)
+        return _german_trip_analysis(base, destination_province, margin, inv_cfg, listing, cfg=cfg)
 
     if not destination_province:
         return None
@@ -154,26 +162,116 @@ def trip_analysis(
     )
 
 
+def _matriculacion_rate(co2_g_km: int) -> float:
+    """Tipo del impuesto de matriculación según Ley 38/1992 (Art. 70 bis).
+
+    Fuente: Ley 38/1992, de 28 de diciembre, de Impuestos Especiales.
+    Tramos vigentes para turismos desde 2008:
+      ≤ 120 g/km  → 0 %
+      121-160 g/km → 4,75 %
+      161-200 g/km → 9,75 %
+      > 200 g/km  → 14,75 %
+    """
+    if co2_g_km <= 120:
+        return 0.0
+    elif co2_g_km <= 160:
+        return 0.0475
+    elif co2_g_km <= 200:
+        return 0.0975
+    else:
+        return 0.1475
+
+
+def _estimate_co2(fuel: str | None, power_cv: int | None) -> int:
+    """Estima g/km de CO2 cuando el dato no está disponible en el anuncio."""
+    cv = power_cv or 90
+    if fuel in ("electrico",):
+        return 0
+    if fuel in ("hibrido", "hibrido_enchufable"):
+        return 60
+    if cv <= 90:
+        return 125
+    elif cv <= 130:
+        return 140
+    elif cv <= 180:
+        return 160
+    else:
+        return 185
+
+
 def _german_trip_analysis(
     base: str,
     city: str | None,
     margin: float | None,
     inv_cfg: dict,
+    listing=None,
+    itp_rate: float = 0.05,
+    cfg=None,
 ) -> TripAnalysis:
-    """Análisis simplificado para coches en Alemania."""
-    # Coste aproximado de importar un coche de Alemania
-    # Vuelo + tren + gestión: ~€300-500
-    # Reregistro + ITV: ~€300
-    # Transporte en barco/camión si no lo traes tú: ~€800-1500
-    import_cost = float(inv_cfg.get("coste_importacion_de", 1800.0))
+    """Análisis de importación desde Alemania con costes calculados por coche.
+
+    Desglose:
+    1. Transporte: vuelo+tren de regreso (conduces tú) o camión portacoches
+    2. ITV de importación + homologación (ajuste de luces, km a unidades SI...)
+    3. Impuesto de matriculación (Ley 38/1992): depende de CO2 del coche
+    4. ITP: tipo de la comunidad autónoma sobre el valor de compra
+    5. Gestoría especial de importación
+    Además: si el vendedor es un concesionario (profesional), el precio alemán
+    incluye MwSt (IVA alemán 19%). Para exportación a otro estado UE, algunos
+    concesionarios aplican exención (steuerfreie Ausfuhrlieferung) → precio neto
+    ~16% inferior. Avisamos si el vendedor es profesional.
+    """
     margen_min = float(inv_cfg.get("margen_minimo_viaje", 1500.0))
 
-    net_margin = (margin or 0.0) - import_cost
+    # 1. Transporte: vuelo BCN→ciudad DE (~150€) + tren desde ciudad (~80€) + gasolina retorno
+    transport = float(inv_cfg.get("coste_transporte_de", 650.0))
+
+    # 2. ITV de importación + homologación
+    itv_import = float(inv_cfg.get("coste_itv_importacion", 350.0))
+
+    # 3. Impuesto de matriculación (Ley 38/1992) — basado en CO2
+    purchase_price = (listing.price if listing else None) or 0.0
+    if listing and listing.co2_g_km:
+        co2 = listing.co2_g_km
+        co2_source = f"{co2} g/km (dato del anuncio)"
+    elif listing:
+        co2 = _estimate_co2(listing.fuel, listing.power_cv)
+        co2_source = f"~{co2} g/km (estimado según motor)"
+    else:
+        co2 = 140
+        co2_source = f"~{co2} g/km (estimado por defecto)"
+    mat_rate = _matriculacion_rate(co2)
+    impuesto_mat = round(purchase_price * mat_rate, 0)
+
+    # 4. ITP (Comunidad Autónoma del comprador — Catalunya = 5%)
+    if cfg is not None:
+        itp_rate = float(cfg.get_path("itp.tipo_por_defecto", 0.05))
+    itp = round(purchase_price * itp_rate, 0)
+
+    # 5. Gestoría (trámites de importación, más compleja que una transferencia normal)
+    gestoria = float(inv_cfg.get("coste_gestoria_importacion", 300.0))
+
+    total_import = transport + itv_import + impuesto_mat + itp + gestoria
+
+    net_margin = (margin or 0.0) - total_import
     worth = net_margin >= margen_min
+
+    # Flags informativos
+    flags = [
+        f"Impuesto matriculación: {mat_rate:.2%} sobre {purchase_price:,.0f} € = {impuesto_mat:,.0f} € (CO2 {co2_source})".replace(",", "."),
+        f"ITP {itp_rate:.0%}: {itp:,.0f} €".replace(",", "."),
+        f"Transporte+ITV+gestoría: {transport + itv_import + gestoria:,.0f} €".replace(",", "."),
+    ]
+    if listing and getattr(listing, "seller_type", "") == "profesional":
+        flags.append(
+            "Vendedor profesional: precio podría ser brutto (con MwSt 19%). "
+            "Pregunta si aplica steuerfreie Ausfuhrlieferung (exportación sin IVA)"
+        )
 
     verdict = (
         f"{'VALE' if worth else 'NO vale'} la pena importar de Alemania: "
-        f"margen neto {net_margin:.0f} € tras costes de importación ~{import_cost:.0f} €"
+        f"margen neto {net_margin:.0f} € tras costes de importación {total_import:.0f} € "
+        f"(transporte {transport:.0f} + ITV {itv_import:.0f} + matric. {impuesto_mat:.0f} + ITP {itp:.0f} + gestoria {gestoria:.0f})"
     )
 
     return TripAnalysis(
@@ -182,15 +280,15 @@ def _german_trip_analysis(
         country="DE",
         distance_km=1800.0,
         duration_min=1200.0,
-        fuel_cost=import_cost,
-        time_cost=0,
-        hotel_cost=0,
-        total_trip_cost=import_cost,
+        fuel_cost=transport,
+        time_cost=itv_import + gestoria,
+        hotel_cost=impuesto_mat + itp,
+        total_trip_cost=total_import,
         net_margin=net_margin,
         worth_trip=worth,
         score_penalty=15,
         verdict=verdict,
-        flags=["Importación DE: homologación ITV", "Homologar luces y km"],
+        flags=flags,
     )
 
 

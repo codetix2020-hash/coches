@@ -92,7 +92,7 @@ def process(conn: sqlite3.Connection, listings: list[Listing], cfg: Config,
                 res.evaluation = ev
         # Análisis del viaje desde la base del inversor
         country = lst.raw.get("country", "ES") if lst.raw else "ES"
-        trip = trip_analysis(lst.province, ev.margin, cfg, country)
+        trip = trip_analysis(lst.province, ev.margin, cfg, country, listing=lst)
         if trip and trip.score_penalty > 0:
             ev.score = max(0, ev.score - trip.score_penalty)
             ev.reasons.append(f"viaje {trip.distance_km:.0f} km (−{trip.score_penalty:.0f} pts)")
