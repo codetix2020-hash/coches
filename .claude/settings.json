@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python -c \"import sys,json,subprocess,os; d=json.load(sys.stdin); f=d.get('tool_input',{}).get('file_path',''); ruff=os.path.join(os.getcwd(),'.venv','Scripts','ruff.exe'); f.endswith('.py') and subprocess.run([ruff,'format',f],capture_output=True); f.endswith('.py') and subprocess.run([ruff,'check','--fix',f],capture_output=True)\"",
+            "statusMessage": "Formateando con ruff..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git commit*)",
+            "command": "python -c \"import subprocess,os,sys; root=os.getcwd(); ruff=os.path.join(root,'.venv','Scripts','ruff.exe'); pytest=os.path.join(root,'.venv','Scripts','pytest.exe'); r1=subprocess.run([ruff,'format','cazachollos/','tests/'],capture_output=True); r2=subprocess.run([pytest,'tests/','-q','--tb=short'],capture_output=True,text=True); sys.stdout.write(r2.stdout+r2.stderr); sys.exit(r2.returncode)\"",
+            "statusMessage": "Ejecutando tests y ruff antes de commit..."
+          }
+        ]
+      }
+    ]
+  }
+}
