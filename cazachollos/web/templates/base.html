@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Cazachollos{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav>
+  <a href="/" class="brand">🚗 Cazachollos</a>
+  <span class="nav-links">
+    <a href="/?sort=score">Por score</a>
+    <a href="/?sort=new">Más recientes</a>
+    <a href="/?favoritos=1">⭐ Favoritos</a>
+    <a href="/?stage=comprado">Comprados</a>
+    <a href="/?stage=vendido">Vendidos</a>
+  </span>
+</nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+<script>
+async function patchPipeline(id, data) {
+  const r = await fetch(`/api/pipeline/${id}`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  });
+  return r.ok;
+}
+</script>
+</body>
+</html>

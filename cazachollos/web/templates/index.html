@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Cazachollos — {{ total }} anuncios{% endblock %}
+{% block content %}
+
+<div class="toolbar">
+  <form method="get" class="filters">
+    <input type="text" name="q" value="{{ filters.q }}" placeholder="Buscar marca, modelo…">
+    <select name="score_min">
+      <option value="0" {% if not filters.score_min %}selected{% endif %}>Todos los scores</option>
+      <option value="70" {% if filters.score_min == 70 %}selected{% endif %}>Score ≥ 70</option>
+      <option value="60" {% if filters.score_min == 60 %}selected{% endif %}>Score ≥ 60</option>
+      <option value="50" {% if filters.score_min == 50 %}selected{% endif %}>Score ≥ 50</option>
+    </select>
+    <select name="label">
+      <option value="" {% if not filters.label %}selected{% endif %}>Todas las etiquetas</option>
+      {% for lbl in ["Chollo","Bueno","Justo","Caro","Muy caro","Sin valoración"] %}
+      <option value="{{ lbl }}" {% if filters.label == lbl %}selected{% endif %}>{{ lbl }}</option>
+      {% endfor %}
+    </select>
+    <select name="stage">
+      <option value="" {% if not filters.stage %}selected{% endif %}>Todas las etapas</option>
+      {% for s in stages %}
+      <option value="{{ s }}" {% if filters.stage == s %}selected{% endif %}>{{ s|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select name="sort">
+      <option value="score" {% if filters.sort == "score" %}selected{% endif %}>Mejor score</option>
+      <option value="new" {% if filters.sort == "new" %}selected{% endif %}>Más recientes</option>
+    </select>
+    <button type="submit">Filtrar</button>
+    <a href="/" class="btn-reset">✕</a>
+  </form>
+  <span class="count">{{ total }} resultado(s)</span>
+</div>
+
+{% if not listings %}
+<div class="empty">
+  <p>Sin resultados. Prueba a cargar datos con:<br>
+  <code>python -m cazachollos demo</code></p>
+</div>
+{% endif %}
+
+<div class="cards">
+{% for lst in listings %}
+<div class="card label-{{ lst.label|lower|replace(' ','') }}">
+  <div class="card-header">
+    <span class="score score-{{ 'high' if lst.score >= 70 else ('mid' if lst.score >= 50 else 'low') }}">{{ lst.score or '?' }}</span>
+    <span class="label-badge">{{ lst.label }}</span>
+    {% if lst.favorite %}<span class="fav">⭐</span>{% endif %}
+  </div>
+  <h3><a href="/detalle/{{ lst.id }}">{{ lst.title or lst.make ~ ' ' ~ lst.model }}</a></h3>
+  <div class="meta">
+    📍 {{ lst.province or '?' }}
+    &nbsp;·&nbsp;🗓 {{ lst.year or '?' }}
+    &nbsp;·&nbsp;{{ lst.km | km }}
+    &nbsp;·&nbsp;{{ lst.fuel or '?' }}
+  </div>
+  <div class="prices">
+    <span class="price">{{ lst.price | eur }}</span>
+    {% if lst.market_price %}
+    <span class="market">mercado {{ lst.market_price | eur }}</span>
+    {% endif %}
+    {% if lst.margin %}
+    <span class="margin {% if lst.margin >= 1000 %}green{% elif lst.margin >= 0 %}orange{% else %}red{% endif %}">
+      margen {{ lst.margin | eur }}
+    </span>
+    {% endif %}
+  </div>
+  {% if lst.graves %}
+  <div class="alerts">⚠ {{ lst.graves[0] }}</div>
+  {% endif %}
+  {% if lst.positivas %}
+  <div class="positives">✓ {{ lst.positivas[0] }}</div>
+  {% endif %}
+  <div class="card-footer">
+    <span class="stage-pill">{{ lst.stage }}</span>
+    <select onchange="patchPipeline({{ lst.id }}, {stage: this.value}).then(()=>location.reload())" title="Cambiar etapa">
+      {% for s in stages %}
+      <option value="{{ s }}" {% if lst.stage == s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    {% if lst.url %}<a href="{{ lst.url }}" target="_blank" class="btn-ext">↗ Ver</a>{% endif %}
+    <a href="/detalle/{{ lst.id }}" class="btn-detail">Detalles →</a>
+  </div>
+</div>
+{% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}{{ r['title'] or 'Anuncio' }} — Cazachollos{% endblock %}
+{% block content %}
+
+<div class="detail-header">
+  <a href="/" class="back">← Volver</a>
+  <div class="detail-title-row">
+    <h1>{{ r['title'] or (r['make']|capitalize ~ ' ' ~ r['model']|capitalize) }}</h1>
+    <button onclick="toggleFav({{ r['id'] }}, this)" class="fav-btn {% if r['favorite'] %}active{% endif %}">
+      ⭐ {% if r['favorite'] %}Favorito{% else %}Añadir favorito{% endif %}
+    </button>
+  </div>
+  <div class="meta-row">
+    📍 {{ r['province'] or '?' }}
+    &nbsp;·&nbsp;🗓 {{ r['year'] or '?' }}
+    &nbsp;·&nbsp;{{ r['km'] | km }}
+    &nbsp;·&nbsp;{{ r['fuel'] or '?' }}
+    &nbsp;·&nbsp;{{ r['transmission'] or '?' }}
+    {% if r['power_cv'] %}&nbsp;·&nbsp;{{ r['power_cv'] }} CV{% endif %}
+    &nbsp;·&nbsp;{{ r['seller_type'] or '?' }}
+    &nbsp;·&nbsp;Etiqueta DGT: <strong>{{ r['dgt_label'] or '—' }}</strong>
+  </div>
+</div>
+
+<div class="detail-grid">
+
+  <!-- Columna izquierda: fotos + datos principales -->
+  <div class="col-main">
+    {% if images %}
+    <div class="photo-gallery">
+      {% for img in images[:8] %}
+      <img src="{{ img }}" alt="foto {{ loop.index }}" loading="lazy" onerror="this.style.display='none'">
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="score-box label-{{ label|lower|replace(' ','') }}">
+      <span class="big-score">{{ r['score'] or '?' }}<small>/100</small></span>
+      <span class="big-label">{{ label }}</span>
+    </div>
+
+    <table class="prices-table">
+      <tr><th>Precio anunciado</th><td><strong>{{ r['price'] | eur }}</strong></td></tr>
+      {% if r['market_price'] %}
+      <tr><th>Precio de mercado</th><td>{{ r['market_price'] | eur }}
+        <small>({{ r['comparables_n'] }} comparables, conf. {{ "%.0f%%"|format(r['confidence']*100) }})</small></td></tr>
+      <tr><th>Venta realista</th><td>{{ r['sale_price'] | eur }}</td></tr>
+      {% endif %}
+      {% if r['total_costs'] %}
+      <tr><th>Costes totales</th><td>{{ r['total_costs'] | eur }}</td></tr>
+      {% endif %}
+      {% if r['margin'] %}
+      <tr class="{% if r['margin'] >= 1000 %}green{% elif r['margin'] >= 0 %}orange{% else %}red{% endif %}">
+        <th>Margen neto</th>
+        <td><strong>{{ r['margin'] | eur }}</strong>
+        {% if r['roi'] %}<small> (ROI {{ "%.0f%%"|format(r['roi']*100) }})</small>{% endif %}</td>
+      </tr>
+      {% endif %}
+      {% if max_offer %}
+      <tr class="highlight"><th>🎯 Oferta máxima</th><td><strong>{{ max_offer | eur }}</strong></td></tr>
+      {% endif %}
+    </table>
+
+    {% if r['url'] %}
+    <a href="{{ r['url'] }}" target="_blank" class="btn-primary">↗ Ver anuncio original</a>
+    {% endif %}
+  </div>
+
+  <!-- Columna derecha: alarmas, costes, pipeline -->
+  <div class="col-side">
+
+    <!-- Alarmas y señales -->
+    {% if flags %}
+    <section>
+      <h2>Alarmas y señales</h2>
+      <ul class="flags">
+        {% for f in flags %}
+        <li class="flag-{{ f.severity }}">
+          {% if f.severity == 'grave' %}🚨{% elif f.severity == 'media' %}⚠️{% elif f.severity == 'positiva' %}✅{% else %}·{% endif %}
+          <strong>{{ f.severity }}</strong>: {{ f.message }}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <!-- Motivos de puntuación -->
+    {% if reasons %}
+    <section>
+      <h2>Motivos de la puntuación</h2>
+      <ul class="reasons">
+        {% for r_text in reasons %}
+        <li>{{ r_text }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <!-- Desglose de costes -->
+    {% if costs %}
+    <section>
+      <h2>Desglose de costes</h2>
+      <table class="costs-table">
+        <tr><th>Concepto</th><th>Importe</th><th>Detalle</th></tr>
+        {% for nombre, info in costs.items() %}
+        <tr>
+          <td>{{ nombre }}</td>
+          <td class="num">{{ info.eur | eur }}</td>
+          <td class="nota">{{ info.nota or '' }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+    </section>
+    {% endif %}
+
+    <!-- Historial de precios -->
+    {% if price_hist|length > 1 %}
+    <section>
+      <h2>Historial de precio</h2>
+      <ul class="price-hist">
+        {% for p in price_hist %}
+        <li>{{ p.seen_at[:10] }}: {{ p.price | eur }}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    <!-- Visión -->
+    {% if vision %}
+    <section>
+      <h2>Análisis de fotos (IA)</h2>
+      <p>Riesgo: <strong>{{ vision.riesgo_0_10 }}/10</strong></p>
+      <p>{{ vision.resumen }}</p>
+      {% if vision.golpes_visibles %}
+      <p>Golpes: {{ vision.golpes_visibles|join(', ') }}</p>
+      {% endif %}
+    </section>
+    {% endif %}
+
+    <!-- Pipeline -->
+    <section>
+      <h2>Seguimiento</h2>
+      <div class="pipeline-form">
+        <label>Etapa:
+          <select id="stage-sel" onchange="saveField({{ r['id'] }}, 'stage', this.value)">
+            {% for s in stages %}
+            <option value="{{ s }}" {% if r['stage'] == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        {% if r['stage'] in ['comprado','vendido'] %}
+        <label>Precio de compra (€): <input type="number" id="buy-price" value="{{ r['buy_price'] or '' }}"
+          onblur="saveField({{ r['id'] }}, 'buy_price', this.value ? parseFloat(this.value) : null)"></label>
+        <label>Precio de venta (€): <input type="number" id="sell-price" value="{{ r['sell_price'] or '' }}"
+          onblur="saveField({{ r['id'] }}, 'sell_price', this.value ? parseFloat(this.value) : null)"></label>
+        <label>Costes extra (€): <input type="number" id="extra-costs" value="{{ r['extra_costs'] or '' }}"
+          onblur="saveField({{ r['id'] }}, 'extra_costs', this.value ? parseFloat(this.value) : null)"></label>
+        {% if r['buy_price'] and r['sell_price'] %}
+        <p class="beneficio-real">Beneficio real: <strong>{{ (r['sell_price'] - r['buy_price'] - (r['extra_costs'] or 0)) | eur }}</strong></p>
+        {% endif %}
+        {% endif %}
+        <label>Notas: <textarea id="notes" onblur="saveField({{ r['id'] }}, 'notes', this.value)">{{ r['notes'] or '' }}</textarea></label>
+      </div>
+    </section>
+
+  </div><!-- col-side -->
+</div><!-- detail-grid -->
+
+<!-- Mensaje al vendedor -->
+<section class="seller-msg-section">
+  <h2>📱 Mensaje para el vendedor</h2>
+  <pre id="seller-msg">{{ seller_msg }}</pre>
+  <button onclick="copyMsg()">📋 Copiar</button>
+</section>
+
+<!-- Checklist de inspección -->
+<section>
+  <h2>✅ Checklist de inspección</h2>
+  <ul class="checklist">
+    {% for item in checklist %}
+    <li><label><input type="checkbox"> {{ item }}</label></li>
+    {% endfor %}
+  </ul>
+</section>
+
+<script>
+async function saveField(id, field, value) {
+  const data = {};
+  data[field] = value;
+  await patchPipeline(id, data);
+}
+async function toggleFav(id, btn) {
+  const active = btn.classList.toggle('active');
+  await patchPipeline(id, {favorite: active ? 1 : 0});
+  btn.textContent = active ? '⭐ Favorito' : '⭐ Añadir favorito';
+}
+function copyMsg() {
+  const text = document.getElementById('seller-msg').textContent;
+  navigator.clipboard.writeText(text).then(() => alert('Copiado al portapapeles'));
+}
+</script>
+{% endblock %}
