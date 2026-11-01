@@ -1,10 +1,97 @@
-"""Distancias aproximadas entre provincias (capital a capital, factor carretera 1,25)."""
+"""Distancias entre provincias.
+
+road_km_real() usa OSRM (router.project-osrm.org) para distancia de conducción exacta.
+road_km() es la versión offline rápida (haversine × 1.25) como fallback.
+"""
 
 from __future__ import annotations
 
+import logging
 import math
 
+import httpx
+
 from .normalize import norm_text
+
+# Mapping of Spanish postal code prefixes (2 digits) → province key in PROVINCES
+_ZIP_TO_PROVINCE = {
+    "01": "alava", "02": "albacete", "03": "alicante", "04": "almeria",
+    "05": "avila", "06": "badajoz", "07": "illes balears", "08": "barcelona",
+    "09": "burgos", "10": "caceres", "11": "cadiz", "12": "castellon",
+    "13": "ciudad real", "14": "cordoba", "15": "a coruna", "16": "cuenca",
+    "17": "girona", "18": "granada", "19": "guadalajara", "20": "gipuzkoa",
+    "21": "huelva", "22": "huesca", "23": "jaen", "24": "leon",
+    "25": "lleida", "26": "la rioja", "27": "lugo", "28": "madrid",
+    "29": "malaga", "30": "murcia", "31": "navarra", "32": "ourense",
+    "33": "asturias", "34": "palencia", "35": "las palmas", "36": "pontevedra",
+    "37": "salamanca", "38": "santa cruz de tenerife", "39": "cantabria", "40": "segovia",
+    "41": "sevilla", "42": "soria", "43": "tarragona", "44": "teruel",
+    "45": "toledo", "46": "valencia", "47": "valladolid", "48": "bizkaia",
+    "49": "zamora", "50": "zaragoza", "51": "ceuta", "52": "melilla",
+}
+
+
+def province_from_zip(zip_code: str | None) -> str | None:
+    """Devuelve la clave de provincia a partir del código postal (2 primeros dígitos)."""
+    if not zip_code:
+        return None
+    digits = zip_code.strip().lstrip("0").zfill(5)[:2]
+    # Handle short zip codes (e.g. "8403" → "08")
+    if len(zip_code.strip()) < 5:
+        digits = zip_code.strip().zfill(5)[:2]
+    return _ZIP_TO_PROVINCE.get(digits)
+
+log = logging.getLogger("cazachollos")
+
+_osrm_cache: dict[tuple, tuple[float, float]] = {}
+
+
+def road_km_real(lat1: float, lon1: float, lat2: float, lon2: float) -> tuple[float, float] | None:
+    """Distancia y tiempo de conducción reales via OSRM.
+
+    Devuelve (km, minutos) o None si no se puede contactar con el servidor.
+    Cachea resultados para evitar peticiones repetidas.
+    """
+    key = (round(lat1, 3), round(lon1, 3), round(lat2, 3), round(lon2, 3))
+    if key in _osrm_cache:
+        return _osrm_cache[key]
+    try:
+        url = (
+            f"http://router.project-osrm.org/route/v1/driving/"
+            f"{lon1},{lat1};{lon2},{lat2}?overview=false"
+        )
+        r = httpx.get(url, timeout=8)
+        if r.status_code == 200:
+            route = r.json()["routes"][0]
+            result = (
+                round(route["distance"] / 1000, 1),
+                round(route["duration"] / 60, 0),
+            )
+            _osrm_cache[key] = result
+            return result
+    except Exception as exc:
+        log.debug("OSRM: %s", exc)
+    return None
+
+
+def road_km_provinces(a: str | None, b: str | None) -> tuple[float, float] | None:
+    """Distancia de conducción entre capitales de provincia (km, minutos).
+
+    Intenta OSRM primero; si falla usa haversine × 1.25 con duración estimada.
+    """
+    ka, kb = province_key(a), province_key(b)
+    if not ka or not kb:
+        return None
+    if ka == kb:
+        return (25.0, 30.0)
+    lat1, lon1 = PROVINCES[ka]
+    lat2, lon2 = PROVINCES[kb]
+    real = road_km_real(lat1, lon1, lat2, lon2)
+    if real:
+        return real
+    # Fallback: haversine
+    dist = road_km(a, b)
+    return (dist, dist / 80 * 60) if dist else None
 
 # Coordenadas aproximadas de las capitales de provincia.
 PROVINCES = {

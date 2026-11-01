@@ -6,9 +6,21 @@
 # =====================================================================
 
 yo:
-  provincia: "Madrid"          # dónde vives (para distancias)
-  comunidad_autonoma: "Madrid" # para el ITP
+  provincia: "Barcelona"       # dónde vives (para distancias y viajes)
+  comunidad_autonoma: "Catalunya" # para el ITP (Catalunya: 5%)
   regimen: "particular"        # "particular" | "rebu" (si te das de alta como compraventa)
+
+# ─── PERSPECTIVA DEL INVERSOR ────────────────────────────────────────────────
+# Sky sale desde Barcelona en busca de chollos. Configurar aquí si esto cambia.
+inversor:
+  base: "Barcelona"            # ciudad/provincia de partida para calcular viajes
+  coste_km: 0.19               # €/km (gasolina + desgaste)
+  valor_hora: 25               # €/hora (coste de oportunidad)
+  margen_minimo_viaje: 1500    # mínimo margen neto para que el viaje valga la pena
+  max_km_sin_hotel: 400        # más de 400 km → contar hotel
+  coste_hotel: 80              # € por noche de hotel
+  presupuesto_max: 15000       # € máximo a desembolsar por un coche
+  coste_importacion_de: 1800   # coste estimado de importar desde Alemania (vuelo+tren+reregistro)
 
 busqueda:                      # filtros de lo que te interesa comprar
   precio_min: 1500
@@ -129,17 +141,29 @@ alarmas:
   fotos_minimas: 3
 
 fuentes:
+  # ── FUENTES REALES DE MERCADO ────────────────────────────────────────────
+  autoscout24:
+    activo: true                      # AutoScout24 España + Alemania (no requiere API key)
+    paises: [ES, DE]                  # ES = España, DE = Alemania (importaciones)
+    marcas: []                        # vacío = todas las marcas. Ej: [volkswagen, seat, toyota]
+    precio_max: 15000                 # € máximo de búsqueda
+    km_max: 200000
+    anio_min: 2012
+    paginas: 3                        # páginas por búsqueda (20 resultados/página)
+    delay_segundos: 1.5               # pausa entre peticiones
+
+  # ── OTRAS FUENTES ────────────────────────────────────────────────────────
   email_alertas:
     activo: false                     # se activa cuando configures el correo (ver README)
     carpeta: "INBOX"
     solo_no_leidos: true
-    remitentes: []                    # vacío = todos. Ej: ["pricauto", "trovit", "coches.net", "wallapop"]
+    remitentes: []
   enriquecer_paginas:
-    activo: false                     # abrir la página del anuncio para completar datos (respeta robots.txt)
+    activo: false
     pausa_segundos: 8
     user_agent: "CazachollosPersonal/1.0 (uso personal; contacto: tu-email@ejemplo.com)"
   importar_ficheros:
-    carpeta: "data/entrada"           # deja aquí CSV/JSON exportados (Pricauto, Apify...) y se importan solos
+    carpeta: "data/entrada"           # deja aquí CSV/JSON exportados y se importan solos
   demo:
     activo: false
 

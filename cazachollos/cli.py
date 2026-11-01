@@ -69,10 +69,12 @@ def _run_once(cfg) -> list:
             return analyze_photos(lst, cfg)
 
     all_listings = []
+    from .sources.autoscout24 import AutoScout24Connector
     connectors = [
         FilesImportConnector(cfg),
         EmailAlertsConnector(cfg),
         DemoConnector(cfg),
+        AutoScout24Connector(cfg),
     ]
     from .sources.base import run_connector
     for c in connectors:
@@ -302,6 +304,251 @@ def cmd_buscar(args, cfg) -> int:
     return 0
 
 
+def cmd_mercado(args, cfg) -> int:
+    """Busca en el mercado real (AutoScout24 España + Alemania) y evalúa."""
+    import sys
+    from . import db, pipeline
+    from .investor import format_trip_card
+    from .notify.telegram import TelegramNotifier
+    from .scoring import cargurus_label
+    from .sources.autoscout24 import AutoScout24Connector
+    from .sources.base import run_connector
+
+    # Ajustar config si se pasó marca o precio
+    if hasattr(args, "marca") and args.marca:
+        cfg.setdefault("fuentes", {}).setdefault("autoscout24", {})["marcas"] = [args.marca]
+    if hasattr(args, "precio_max") and args.precio_max:
+        cfg.setdefault("fuentes", {}).setdefault("autoscout24", {})["precio_max"] = int(args.precio_max)
+    if hasattr(args, "paginas") and args.paginas:
+        cfg.setdefault("fuentes", {}).setdefault("autoscout24", {})["paginas"] = int(args.paginas)
+
+    cfg.setdefault("fuentes", {}).setdefault("autoscout24", {})["activo"] = True
+
+    connector = AutoScout24Connector(cfg)
+    conn = db.connect()
+    notifier = TelegramNotifier(cfg)
+
+    print(f"\n  Buscando en AutoScout24 ES+DE...")
+    listings = run_connector(conn, connector)
+    print(f"  Encontrados: {len(listings)} anuncios")
+
+    if not listings:
+        conn.close()
+        return 0
+
+    results = pipeline.process(conn, listings, cfg, notifier=notifier.send_alert)
+    conn.close()
+
+    # Mostrar los mejores
+    score_min = cfg.get_path("alertas.score_minimo", 60)
+    good = sorted(
+        [r for r in results if r.in_filters and r.evaluation.score >= score_min],
+        key=lambda x: x.evaluation.score,
+        reverse=True,
+    )
+
+    print(f"\n{'='*70}")
+    print(f"  MERCADO REAL — {len(results)} anuncios procesados · {len(good)} interesantes")
+    print(f"{'='*70}")
+
+    if not good:
+        print(f"\n  Ningún anuncio alcanza score >= {score_min} con los datos actuales.")
+        print("  (Necesitas mas anuncios en la BD para tener comparables. Espera unos dias.)")
+        # Mostrar igual los mejores aunque no lleguen al umbral
+        top = sorted([r for r in results if r.in_filters],
+                     key=lambda x: x.evaluation.score, reverse=True)[:5]
+        if top:
+            print("\n  Top 5 (sin comparables suficientes):")
+            for r in top:
+                lst, ev = r.listing, r.evaluation
+                print(f"  [{ev.score:3d}] {lst.title[:55] if lst.title else lst.source_id}")
+                print(f"        {(lst.price or 0):,.0f} € · {lst.province or '?'} · {lst.year or '?'} · {(lst.km or 0):,.0f} km".replace(",", "."))
+                print(f"        {lst.url or '(sin URL)'}")
+        return 0
+
+    for r in good[:8]:
+        lst, ev = r.listing, r.evaluation
+        label = cargurus_label(ev)
+        src_icon = "DE" if "de" in (lst.source or "") else "ES"
+
+        print(f"\n  [{ev.score:3d}] [{src_icon}] {lst.title or lst.source_id}")
+        print(f"        {(lst.price or 0):,.0f} € · {lst.province or '?'} · {lst.year or '?'} · {(lst.km or 0):,.0f} km  [{label}]".replace(",", "."))
+        if ev.market_price:
+            print(f"        Mercado: {ev.market_price:,.0f} €  ({ev.comparables_n} comp., conf. {ev.confidence:.0%})".replace(",", "."))
+        if ev.margin is not None:
+            print(f"        Margen: {ev.margin:,.0f} €  ROI {(ev.roi or 0):.0%}".replace(",", "."))
+        if r.trip:
+            worth = "VALE la pena" if r.trip.worth_trip else "no vale la pena"
+            print(f"        Viaje: {r.trip.distance_km:.0f} km · coste {r.trip.total_trip_cost:.0f} € · {worth}")
+        print(f"        {lst.url or '(sin URL)'}")
+
+    return 0
+
+
+def cmd_analizar(args, cfg) -> int:
+    """Analiza una URL de AutoScout24 con vision y perspectiva inversora."""
+    import sys
+    if not args.url:
+        print("Uso: analizar <url>", file=sys.stderr)
+        return 1
+
+    from . import db, pipeline
+    from .investor import format_trip_card
+    from .models import Listing
+    from .normalize import normalize_listing
+    from .scoring import cargurus_label
+    from .templates import inspection_checklist, seller_message
+    from .vision import analyze_photos
+
+    import json, re
+    import httpx
+
+    url = args.url
+    print(f"\n  Descargando: {url}")
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "es-ES,es;q=0.9",
+    }
+
+    r = httpx.get(url, headers=headers, follow_redirects=True, timeout=20)
+    if r.status_code != 200:
+        print(f"  Error HTTP {r.status_code}", file=sys.stderr)
+        return 1
+
+    m = re.search(r'<script id="__NEXT_DATA__" type="application/json">(.+?)</script>', r.text, re.DOTALL)
+    if not m:
+        print("  No se reconoció el anuncio (no es AutoScout24 o la página ha cambiado).", file=sys.stderr)
+        return 1
+
+    data = json.loads(m.group(1))
+    detail = data.get("props", {}).get("pageProps", {}).get("listingDetails") or \
+             data.get("props", {}).get("pageProps", {}).get("listing")
+
+    if not detail:
+        print("  No se encontraron detalles del vehículo.", file=sys.stderr)
+        return 1
+
+    # Extraer datos
+    from .geo import province_from_zip
+    from .sources.autoscout24 import _FUEL_MAP, _TRANS_MAP, _extract_year, _parse_int, _image_hires
+    country = "ES" if "autoscout24.es" in url else "DE"
+
+    vehicle = detail.get("vehicle", {})
+    location = detail.get("location", {})
+
+    title = detail.get("title") or f"{vehicle.get('make', '')} {vehicle.get('model', '')}"
+    motor = vehicle.get("motorTypeName", "") or vehicle.get("modelVersionInput", "")
+    if motor and motor.lower() not in title.lower():
+        title = f"{title} {motor}"
+
+    # Price: detail page uses "prices.public.priceRaw"
+    price = (
+        (detail.get("prices") or {}).get("public", {}).get("priceRaw")
+        or detail.get("price", {}).get("priceRaw")
+        or detail.get("priceRaw")
+    )
+
+    make = (vehicle.get("make") or "").lower()
+    model = (vehicle.get("model") or "").lower()
+
+    # Year: detail page has firstRegistrationDateRaw "2021-01-01"
+    year = _extract_year(
+        vehicle.get("firstRegistrationDateRaw")
+        or vehicle.get("firstRegistrationDate")
+        or vehicle.get("firstRegistration")
+    )
+
+    # km: detail page has mileageInKmRaw as int
+    km = vehicle.get("mileageInKmRaw") or _parse_int(vehicle.get("mileageInKm"))
+
+    # Fuel
+    fuel_cat = vehicle.get("fuelCategory", {})
+    fuel_raw = (fuel_cat.get("formatted") if isinstance(fuel_cat, dict) else None) or vehicle.get("fuel", "")
+    fuel = _FUEL_MAP.get(fuel_raw) or (fuel_raw.lower() if fuel_raw else None)
+
+    # Transmission
+    trans_raw = vehicle.get("transmissionType") or vehicle.get("transmission", "")
+    transmission = _TRANS_MAP.get(trans_raw, trans_raw.lower() if trans_raw else None)
+
+    # Power
+    power_cv = vehicle.get("rawPowerInHp")
+
+    # Province: try zip code first, then city name
+    zip_code = location.get("zip", "")
+    province = province_from_zip(zip_code) or location.get("city") or ""
+
+    # Published date
+    published_at = detail.get("createdTimestampWithOffset")
+
+    # Description (HTML → plain text)
+    desc_html = detail.get("description", "")
+    desc = re.sub(r"<[^>]+>", " ", desc_html).strip()
+
+    # Images: detail page returns full URLs
+    raw_images = detail.get("images") or []
+    images = []
+    for img in raw_images[:10]:
+        if isinstance(img, dict):
+            img_url = img.get("url") or img.get("src") or ""
+        else:
+            img_url = str(img)
+        if img_url:
+            images.append(_image_hires(img_url))
+
+    lst = Listing(
+        source=f"autoscout24_{country.lower()}",
+        source_id=f"as24_{country}_{detail.get('id', 'manual')}",
+        url=url,
+        title=title,
+        description=desc,
+        make=make,
+        model=model,
+        year=year,
+        km=km,
+        price=int(price) if price else None,
+        fuel=fuel,
+        transmission=transmission,
+        power_cv=power_cv,
+        province=province,
+        images=images,
+        published_at=published_at,
+        raw={"country": country, "location": location},
+    )
+    normalize_listing(lst)
+
+    conn = db.connect()
+    ev = pipeline.evaluate(conn, lst, cfg)
+
+    # Vision: si hay ANTHROPIC_API_KEY y las fotos están disponibles
+    if images and cfg.get_path("vision.activo", False):
+        print(f"  Analizando {len(images)} fotos con Claude Vision...")
+        vres = analyze_photos(lst, cfg)
+        if vres:
+            ev = pipeline._apply_vision(ev, vres)
+            print(f"  Vision: riesgo {vres.get('riesgo_0_10', '?')}/10 — {vres.get('resumen', '')}")
+
+    # Análisis del viaje
+    from .investor import trip_analysis, format_trip_card
+    trip = trip_analysis(province, ev.margin, cfg, country)
+
+    conn.close()
+    _print_evaluation(lst, ev, cfg)
+
+    if trip:
+        print(f"\n{'─'*60}")
+        print("  ANALISIS DEL VIAJE:")
+        print(f"{'─'*60}")
+        print(format_trip_card(trip))
+
+    if images:
+        print(f"\n  Fotos del anuncio ({len(images)}):")
+        for img in images[:4]:
+            print(f"    {img}")
+
+    return 0
+
+
 # ── Helpers de presentación ───────────────────────────────────────────────────
 
 def _print_results_summary(results: list, cfg) -> None:
@@ -408,6 +655,14 @@ def build_parser() -> argparse.ArgumentParser:
     buscar_p = sub.add_parser("buscar", help="Parsea búsqueda en lenguaje natural")
     buscar_p.add_argument("texto", nargs="*", help="Texto de búsqueda")
 
+    mercado_p = sub.add_parser("mercado", help="Busca en AutoScout24 España+Alemania (mercado real)")
+    mercado_p.add_argument("--marca", metavar="MARCA", help="Ej: volkswagen, seat, toyota")
+    mercado_p.add_argument("--precio-max", metavar="EUR", help="Precio máximo en euros")
+    mercado_p.add_argument("--paginas", metavar="N", default=2, help="Páginas a escanear (default: 2)")
+
+    analizar_p = sub.add_parser("analizar", help="Analiza un anuncio concreto de AutoScout24 con vision y viaje")
+    analizar_p.add_argument("url", nargs="?", help="URL del anuncio en autoscout24.es o .de")
+
     return p
 
 
@@ -430,6 +685,8 @@ def main(argv=None) -> int:
         "itp": cmd_itp,
         "salud": cmd_salud,
         "buscar": cmd_buscar,
+        "mercado": cmd_mercado,
+        "analizar": cmd_analizar,
     }
     fn = dispatch.get(args.cmd)
     if fn:

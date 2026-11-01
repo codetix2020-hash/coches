@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from . import db
 from .config import Config
 from .costs import compute_costs
 from .dedupe import assign_group
+from .investor import TripAnalysis, trip_analysis
 from .models import Evaluation, Flag, Listing
 from .normalize import normalize_listing
 from .redflags import detect_flags
@@ -28,6 +29,7 @@ class Result:
     in_filters: bool
     filter_reason: str
     duplicate_of: list[str]
+    trip: TripAnalysis | None = field(default=None)
 
 
 def evaluate(conn: sqlite3.Connection | None, lst: Listing, cfg: Config,
@@ -88,6 +90,14 @@ def process(conn: sqlite3.Connection, listings: list[Listing], cfg: Config,
                 db.save_vision(conn, listing_id, vres)
                 ev = _apply_vision(ev, vres)
                 res.evaluation = ev
+        # Análisis del viaje desde la base del inversor
+        country = lst.raw.get("country", "ES") if lst.raw else "ES"
+        trip = trip_analysis(lst.province, ev.margin, cfg, country)
+        if trip and trip.score_penalty > 0:
+            ev.score = max(0, ev.score - trip.score_penalty)
+            ev.reasons.append(f"viaje {trip.distance_km:.0f} km (−{trip.score_penalty:.0f} pts)")
+        res.trip = trip
+
         db.save_evaluation(conn, listing_id, res.evaluation)
         if notifier is not None and should_alert(res, cfg):
             for channel in cfg.get_path("alertas.canales", ["telegram"]):

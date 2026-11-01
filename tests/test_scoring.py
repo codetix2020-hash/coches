@@ -19,7 +19,7 @@ def _ev(market=10000, sale=9400, margin=1500, roi=0.2, confidence=0.8,
 def _listing(**kw) -> Listing:
     defaults = dict(source="test", source_id="1", make="volkswagen", model="golf",
                     year=2016, km=90000, price=7500.0, fuel="diesel",
-                    transmission="manual", province="Madrid", seller_type="particular",
+                    transmission="manual", province="Barcelona", seller_type="particular",
                     images=["a.jpg","b.jpg","c.jpg"])
     defaults.update(kw)
     return Listing(**defaults)
