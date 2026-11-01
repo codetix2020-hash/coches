@@ -52,7 +52,7 @@ def evaluate(conn: sqlite3.Connection | None, lst: Listing, cfg: Config,
         market_price=market, sale_price=sale, comparables_n=est.comparables_n if est else 0,
         confidence=est.confidence if est else 0.0, costs=costs, total_costs=total, margin=margin,
         roi=round(roi, 3) if roi is not None else None, score=sc, flags=flags, reasons=reasons,
-        hacienda_value=hv,
+        hacienda_value=hv, spread=est.spread if est else None,
     )
 
 

@@ -35,6 +35,7 @@ class Listing:
     images: list[str] = field(default_factory=list)
     published_at: str | None = None
     dgt_label: str | None = None
+    co2_g_km: int | None = None  # gramos CO2/km (para impuesto de matriculación)
     raw: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -62,3 +63,4 @@ class Evaluation:
     flags: list[Flag]
     reasons: list[str]
     hacienda_value: float | None = None
+    spread: float | None = None  # dispersión relativa de comparables (IQR/mediana)

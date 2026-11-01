@@ -43,6 +43,41 @@ POSITIVE_PATTERNS = [
 ]
 
 
+_PRICE_CONTADO_RE = re.compile(
+    r"(\d[\d\.,]{2,8})\s*€?\s*(?:al contado|precio contado|de contado|en efectivo)",
+    re.IGNORECASE,
+)
+_PRICE_FINANCIADO_RE = re.compile(
+    r"(\d[\d\.,]{2,8})\s*€?\s*(?:financiad[oa]|con financiaci[oó]n|precio financiad[oa])",
+    re.IGNORECASE,
+)
+_FINANCING_MENTION_RE = re.compile(
+    r"\bfinanciaci[oó]n\b|\bfinanciado\b|\bfinanciada\b|\bcuotas?\b|\bfinanciar\b",
+    re.IGNORECASE,
+)
+
+
+def _detect_financing(lst: Listing, flags: list[Flag], text: str) -> None:
+    """Detecta precios financiados y advierte si no se ve el precio al contado."""
+    contado_m = _PRICE_CONTADO_RE.search(text)
+    financiado_m = _PRICE_FINANCIADO_RE.search(text)
+
+    if contado_m and financiado_m:
+        # Ambos presentes: el precio del anuncio podría ser el financiado (más alto)
+        try:
+            p_contado = float(re.sub(r"[^\d]", "", contado_m.group(1)))
+            p_financiado = float(re.sub(r"[^\d]", "", financiado_m.group(1)))
+            if p_financiado > p_contado and abs(p_contado - (lst.price or 0)) > 200:
+                flags.append(Flag("precio_financiado", "media",
+                                  f"anuncio da precio al contado {p_contado:,.0f} € y financiado {p_financiado:,.0f} €: usa el de contado para valorar".replace(",", ".")))
+        except (ValueError, AttributeError):
+            pass
+    elif _FINANCING_MENTION_RE.search(text) and not contado_m:
+        # Solo menciona financiación sin dar precio al contado explícito
+        flags.append(Flag("precio_solo_financiado", "media",
+                          "el anuncio menciona financiación sin indicar precio al contado"))
+
+
 def detect_flags(conn: sqlite3.Connection | None, lst: Listing, listing_id: int | None,
                  market_price: float | None, cfg: Config) -> list[Flag]:
     a = cfg.get("alarmas", {})
@@ -55,8 +90,10 @@ def detect_flags(conn: sqlite3.Connection | None, lst: Listing, listing_id: int 
             flags.append(Flag("precio_estafa", "grave",
                               f"precio al {ratio:.0%} del mercado: demasiado bueno para ser verdad"))
         elif ratio < a.get("precio_sospechoso_ratio", 0.70):
-            flags.append(Flag("precio_sospechoso", "media",
-                              f"precio al {ratio:.0%} del mercado: comprueba por qué"))
+            flags.append(Flag("precio_sospechoso", "grave",
+                              f"precio al {ratio:.0%} del mercado: comprueba por qué es tan barato"))
+
+    _detect_financing(lst, flags, text)
 
     for pattern, msg in SCAM_PATTERNS:
         if re.search(pattern, text):

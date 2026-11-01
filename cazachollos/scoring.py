@@ -25,8 +25,14 @@ def cargurus_label(ev) -> str:
     """Devuelve 'Chollo', 'Bueno', 'Justo', 'Caro', 'Muy caro' o 'Sin valoración'."""
     if ev.market_price is None or ev.comparables_n == 0:
         return "Sin valoración"
+    # Con pocos comparables o mucha dispersión de km no damos etiqueta positiva
+    thin_data = ev.comparables_n < 8 or (
+        getattr(ev, "spread", None) is not None and ev.spread > 0.45
+    )
     for threshold, label in _LABEL_THRESHOLDS:
         if ev.score >= threshold:
+            if thin_data and label in ("Chollo", "Bueno"):
+                return "Justo"  # no confirmamos chollo sin datos sólidos
             return label
     return "Muy caro"
 
