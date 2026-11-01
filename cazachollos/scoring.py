@@ -10,6 +10,26 @@ from .models import Flag, Listing
 
 PENALTY = {"grave": 40, "media": 12, "leve": 3}
 
+# ── Etiqueta tipo CarGurus ────────────────────────────────────────────────────
+
+_LABEL_THRESHOLDS = [
+    (80, "Chollo"),
+    (65, "Bueno"),
+    (50, "Justo"),
+    (35, "Caro"),
+    (0,  "Muy caro"),
+]
+
+
+def cargurus_label(ev) -> str:
+    """Devuelve 'Chollo', 'Bueno', 'Justo', 'Caro', 'Muy caro' o 'Sin valoración'."""
+    if ev.market_price is None or ev.comparables_n == 0:
+        return "Sin valoración"
+    for threshold, label in _LABEL_THRESHOLDS:
+        if ev.score >= threshold:
+            return label
+    return "Muy caro"
+
 
 def passes_filters(lst: Listing, cfg: Config) -> tuple[bool, str]:
     b = cfg.get("busqueda", {})

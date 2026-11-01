@@ -103,3 +103,24 @@ def detect_flags(conn: sqlite3.Connection | None, lst: Listing, listing_id: int 
                     flags.append(Flag("precio_distinto", "leve",
                                       f"en {o['source']} está a {o['price']:,.0f} €".replace(",", ".")))
     return flags
+
+
+def verify_km_vs_itv(lst: Listing, itv_km: int | None, itv_year: int | None) -> Flag | None:
+    """Compara los km del anuncio con el historial de ITV del informe DGT.
+
+    itv_km:   última lectura de km en el informe DGT
+    itv_year: año de esa última ITV
+
+    Devuelve un Flag grave si los km del anuncio son inferiores a los de la ITV.
+    """
+    if lst.km is None or itv_km is None:
+        return None
+    if lst.km < itv_km:
+        diff = itv_km - lst.km
+        return Flag(
+            "km_manipulados",
+            "grave",
+            f"el anuncio dice {lst.km:,} km pero la ITV del {itv_year or '?'} "
+            f"marcó {itv_km:,} km → posible manipulación ({diff:,} km de diferencia)".replace(",", "."),
+        )
+    return None

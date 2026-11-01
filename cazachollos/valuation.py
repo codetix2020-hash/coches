@@ -136,3 +136,75 @@ def estimate_market(conn: sqlite3.Connection, lst: Listing, cfg: Config,
         conf *= max(0.3, 1 - spread)
     method = "regresión edad+km" if fit else "mediana ajustada"
     return MarketEstimate(round(median, -1), n, round(conf, 2), method, [r["id"] for r in comps], spread)
+
+
+# ── Rotación: días medios para vender por modelo ─────────────────────────────
+
+def rotation_days(conn: sqlite3.Connection, make: str, model: str,
+                  province: str | None = None) -> float | None:
+    """Calcula la mediana de días que tardó en desaparecer un anuncio (= venderse).
+
+    Solo usa anuncios ya inactivos (active=0) con first_seen y last_seen distintos.
+    """
+    params: list = [make, model]
+    sql = """SELECT julianday(last_seen) - julianday(first_seen) AS days
+             FROM listings
+             WHERE make=? AND model=? AND active=0
+               AND first_seen IS NOT NULL AND last_seen IS NOT NULL
+               AND julianday(last_seen) - julianday(first_seen) BETWEEN 0.5 AND 180"""
+    if province:
+        sql += " AND province=?"
+        params.append(province)
+    rows = conn.execute(sql, params).fetchall()
+    if len(rows) < 3:
+        return None
+    days = sorted(r["days"] for r in rows)
+    mid = len(days) // 2
+    return round(days[mid] if len(days) % 2 else (days[mid - 1] + days[mid]) / 2, 1)
+
+
+# ── Curvas de valor residual ──────────────────────────────────────────────────
+
+@dataclass
+class ResidualPoint:
+    age_years: float
+    median_price: float
+    n: int
+
+
+def residual_value_curve(conn: sqlite3.Connection, make: str, model: str,
+                         fuel: str | None = None,
+                         transmission: str | None = None) -> list[ResidualPoint]:
+    """Devuelve la curva de depreciación por año de antigüedad para un modelo.
+
+    Útil para priorizar coches cuyo precio cae más lento (mejor retención de valor).
+    """
+    params: list = [make, model]
+    sql = """SELECT year, price FROM listings
+             WHERE make=? AND model=? AND price IS NOT NULL AND price > 300
+               AND year IS NOT NULL"""
+    if fuel:
+        sql += " AND fuel=?"
+        params.append(fuel)
+    if transmission:
+        sql += " AND transmission=?"
+        params.append(transmission)
+    rows = conn.execute(sql, params).fetchall()
+    if not rows:
+        return []
+
+    from datetime import date
+    current_year = date.today().year
+    buckets: dict[int, list[float]] = {}
+    for r in rows:
+        age = max(0, current_year - r["year"])
+        buckets.setdefault(age, []).append(r["price"])
+
+    curve = []
+    for age in sorted(buckets):
+        prices = sorted(buckets[age])
+        mid = len(prices) // 2
+        median = prices[mid] if len(prices) % 2 else (prices[mid - 1] + prices[mid]) / 2
+        if len(prices) >= 2:
+            curve.append(ResidualPoint(float(age), round(median, -1), len(prices)))
+    return curve

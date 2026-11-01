@@ -98,6 +98,18 @@ def process(conn: sqlite3.Connection, listings: list[Listing], cfg: Config,
     return results
 
 
+def max_offer(ev: Evaluation, cfg: Config) -> float | None:
+    """Precio máximo a pagar = venta realista − costes totales − margen mínimo.
+
+    Muéstralo al vendedor como el techo de tu oferta.
+    """
+    if ev.sale_price is None or ev.total_costs is None:
+        return None
+    min_margin = cfg.get_path("objetivos.margen_minimo_eur", 1000)
+    result = ev.sale_price - ev.total_costs - min_margin
+    return round(max(0.0, result), -1) if result > 0 else None
+
+
 def _apply_vision(ev: Evaluation, v: dict) -> Evaluation:
     risk = v.get("riesgo_0_10")
     if isinstance(risk, (int, float)) and risk >= 7:
