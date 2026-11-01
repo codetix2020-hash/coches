@@ -31,6 +31,52 @@ Analiza estas fotos del anuncio y devuelve un JSON con exactamente estas claves:
 Solo JSON, sin explicación adicional."""
 
 
+def vision_cost_estimate(cfg: Config) -> dict:
+    """Devuelve el coste estimado por anuncio y mensual con los parámetros actuales.
+
+    Modelo: claude-sonnet-5-5
+    Precios (nov-2026): input $3/MTok, output $15/MTok (sin caché)
+    Tokens por imagen 1280×960: ~1700 tokens (aprox. w*h/750)
+    """
+    model = cfg.get_path("vision.modelo", "claude-sonnet-5-5")
+    max_fotos = cfg.get_path("vision.max_fotos", 4)
+    score_threshold = cfg.get_path("vision.solo_si_score_mayor_que", 60)
+
+    # Tokens estimados por imagen a resolución 1280×960 webp
+    # Fórmula Anthropic: tokens ≈ (w × h) / 750   para imágenes sin cache
+    tokens_por_foto = round(1280 * 960 / 750)  # ~1638 tokens
+    tokens_prompt = 200
+    tokens_output = 300
+
+    input_tokens = max_fotos * tokens_por_foto + tokens_prompt
+    # Precios en USD (claude-sonnet-5-5 a precios actuales)
+    input_price_usd_per_mtok = 3.0
+    output_price_usd_per_mtok = 15.0
+    usd_eur = 0.93  # aproximado
+
+    cost_usd = (input_tokens * input_price_usd_per_mtok + tokens_output * output_price_usd_per_mtok) / 1_000_000
+    cost_eur = cost_usd * usd_eur
+
+    return {
+        "modelo": model,
+        "max_fotos": max_fotos,
+        "tokens_por_foto": tokens_por_foto,
+        "tokens_input_total": input_tokens,
+        "tokens_output_estimados": tokens_output,
+        "coste_por_anuncio_usd": round(cost_usd, 4),
+        "coste_por_anuncio_eur": round(cost_eur, 4),
+        "solo_si_score_mayor": score_threshold,
+        # Estimaciones mensuales según uso
+        "mensual_10_por_dia_eur": round(cost_eur * 10 * 30, 2),
+        "mensual_50_por_dia_eur": round(cost_eur * 50 * 30, 2),
+        "nota": (
+            f"Solo anuncios con score >{score_threshold} se analizan. "
+            "Si el 10% de tus búsquedas pasa el filtro y buscas 50 coches/día, "
+            f"son ~5 análisis/día = {round(cost_eur * 5 * 30, 2):.2f} €/mes."
+        ),
+    }
+
+
 def _fetch_image_b64(url: str, timeout: int = 15) -> tuple[str, str] | None:
     """Descarga una imagen y la devuelve como (base64, media_type)."""
     try:
