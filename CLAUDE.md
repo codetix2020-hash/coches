@@ -29,6 +29,17 @@ Pendiente, en este orden:
 6. `.claude/commands/` (/buscar, /valorar, /chollos-hoy, /informe-semanal), hooks (ruff format; pytest antes de commit), `.gitignore`, `.env.example`, `requirements.txt`, README paso a paso.
 7. Docs: checklist de inspección, preguntas al vendedor, cómo pedir informe DGT, preguntas para el gestor.
 
+## Funciones copiadas de productos que ya existen (investigación 01-11-2026)
+Ideas de Swoopa, Car Flip Finder, BigFlippa, CarFlipAI, carFlippy, CarGurus (EE. UU./R. Unido), 车300 y 精真估 (China), Indicata (Europa). Copiamos ideas, no código ni marca. Añadir al plan:
+1. **Oferta máxima**: precio máximo a pagar = venta realista − costes − margen mínimo. Mostrar en alerta y panel.
+2. **Mensaje al vendedor redactado** en cada alerta (WhatsApp/chat), con preguntas clave: ITV, km, mantenimiento, cargas, motivo de venta, propietarios.
+3. **Rotación / días para vender** por modelo y provincia, calculado con first_seen/last_seen de anuncios que desaparecen. Usarlo en la puntuación.
+4. **Verificación de km**: comparar km del anuncio con el historial de ITV del informe DGT; marcar posibles km bajados.
+5. **Etiqueta tipo CarGurus** (Chollo / Bueno / Justo / Caro / Muy caro) y "Sin valoración" si faltan comparables.
+6. **Búsqueda en lenguaje natural**: "Golf diésel < 8.000 € a 100 km" → filtros de config.yaml.
+7. **Curvas de valor residual** por modelo para priorizar coches que aguantan precio.
+Ideas de negocio a evaluar con Sky: subastas B2B (Ayvens Carmarket, eCarsTrade, BCA; requieren ser profesional, BCA pide NIF-IVA intracomunitario) e importación desde Alemania (coste de importar ~1.500-3.000 € según carwow). No copiar: scraping de Facebook Marketplace.
+
 ## Cosas a VERIFICAR (no inventar)
 - Tipo de ITP de la comunidad de Sky y casos especiales (cuotas fijas en coches viejos).
 - Porcentajes de depreciación de Hacienda en `config.yaml` contra la Orden HAC/1501/2025; generar `data/hacienda/precios_medios_2026.csv` desde el BOE.
