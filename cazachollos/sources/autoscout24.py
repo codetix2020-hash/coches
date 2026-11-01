@@ -27,6 +27,7 @@ import httpx
 from ..models import Listing
 from ..normalize import normalize_fuel, normalize_listing, normalize_transmission
 from .base import Connector
+from .polite_http import Blocked, allowed
 
 log = logging.getLogger("cazachollos")
 
@@ -44,12 +45,11 @@ _CY_CODES = {
     "PT": "P",   # Portugal
 }
 
+# User-agent honesto: nos identificamos como lo que somos (uso personal, no ClaudeBot)
+_UA = "CazachollosPersonal/1.0 (uso personal; no comercial)"
+
 _HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    ),
+    "User-Agent": _UA,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "es-ES,es;q=0.9",
     "Accept-Encoding": "gzip, deflate, br",
@@ -152,6 +152,13 @@ class AutoScout24Connector(Connector):
     def _fetch_brand(self, domain: str, country: str, brand: str | None) -> Iterator[Listing]:
         for page in range(1, self.pages + 1):
             url = self._build_url(domain, country, brand, page)
+            # Comprobar robots.txt antes de descargar
+            try:
+                if not allowed(url, _UA):
+                    log.warning("autoscout24[%s]: robots.txt deniega %s — saltando", country, url)
+                    break
+            except Exception as exc:
+                log.debug("autoscout24[%s]: robots check error: %s", country, exc)
             log.info("autoscout24[%s]: fetching page %d/%d — %s", country, page, self.pages, url)
             try:
                 listings = self._fetch_page(url)
@@ -164,6 +171,9 @@ class AutoScout24Connector(Connector):
                         yield lst
                 if page < self.pages:
                     time.sleep(self.delay)
+            except Blocked as exc:
+                log.warning("autoscout24[%s]: bloqueado: %s", country, exc)
+                break
             except Exception as exc:
                 log.error("autoscout24[%s]: error on page %d: %s", country, page, exc)
                 break
@@ -253,6 +263,13 @@ class AutoScout24Connector(Connector):
             elif vehicle.get("rawPowerInHp"):
                 power_cv = int(vehicle["rawPowerInHp"])
 
+            # CO2: vehicleDetails "co2Emissions" o "consumption_co2" → "120 g/km"
+            co2_g_km = None
+            co2_raw = vd.get("co2Emissions") or vd.get("consumption_co2") or vd.get("co2") or ""
+            co2_match = re.search(r"(\d+)", str(co2_raw))
+            if co2_match:
+                co2_g_km = int(co2_match.group(1))
+
             relative_url = raw.get("url", "")
             url = _full_url(domain, relative_url)
 
@@ -282,6 +299,7 @@ class AutoScout24Connector(Connector):
                 fuel=fuel,
                 transmission=transmission,
                 power_cv=power_cv,
+                co2_g_km=co2_g_km,
                 province=province,
                 seller_type=seller_type,
                 images=images,

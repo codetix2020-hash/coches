@@ -1,14 +1,15 @@
 """Tests de integración real con AutoScout24 y OSRM.
 
 Estos tests hacen peticiones REALES a internet.
-- Se pueden saltar en CI con: pytest -m "not real_market"
+- NO se ejecutan por defecto (pytest.ini → addopts = -m "not integration")
+- Para ejecutarlos manualmente: pytest -m integration
 - Útiles para verificar que los conectores siguen funcionando.
 """
 
 import pytest
 
-# Mark all tests in this module as real_market
-pytestmark = pytest.mark.real_market
+# Mark all tests in this module as integration (not run by default)
+pytestmark = pytest.mark.integration
 
 
 def test_autoscout24_es_returns_listings(cfg):

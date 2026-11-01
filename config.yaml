@@ -143,14 +143,16 @@ alarmas:
 fuentes:
   # ── FUENTES REALES DE MERCADO ────────────────────────────────────────────
   autoscout24:
-    activo: true                      # AutoScout24 España + Alemania (no requiere API key)
-    paises: [ES, DE]                  # ES = España, DE = Alemania (importaciones)
+    activo: true                      # AutoScout24 España (no requiere API key)
+    # NOTA robots.txt: AS24.de bloquea ClaudeBot + /angebote/ → DE deshabilitado.
+    # AS24.es: /lst/volkswagen? no está en la lista de denegados (sí /lst? y /lst/?).
+    paises: [ES]                      # ES = España. DE deshabilitado por robots.txt.
     marcas: []                        # vacío = todas las marcas. Ej: [volkswagen, seat, toyota]
     precio_max: 15000                 # € máximo de búsqueda
     km_max: 200000
     anio_min: 2012
     paginas: 3                        # páginas por búsqueda (20 resultados/página)
-    delay_segundos: 1.5               # pausa entre peticiones
+    delay_segundos: 2.0               # pausa entre peticiones (cortesía)
 
   # ── OTRAS FUENTES ────────────────────────────────────────────────────────
   email_alertas:
