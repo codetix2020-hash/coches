@@ -23,7 +23,9 @@ class Listing:
     year: int | None = None
     km: int | None = None
     price: float | None = None
-    fuel: str | None = None  # diesel | gasolina | hibrido | hibrido_enchufable | electrico | glp | gnc
+    fuel: str | None = (
+        None  # diesel | gasolina | hibrido | hibrido_enchufable | electrico | glp | gnc
+    )
     transmission: str | None = None  # manual | automatico
     power_cv: int | None = None
     province: str | None = None

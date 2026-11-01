@@ -313,7 +313,7 @@ def _print_results_summary(results: list, cfg) -> None:
 
     print(f"\n  Total procesados:   {len(results)}")
     print(f"  Dentro de filtros:  {len(in_filters)}")
-    print(f"  Chollos (score≥{cfg.get_path('alertas.score_minimo', 70)}): {len(alerts)}")
+    print(f"  Chollos (score>={cfg.get_path('alertas.score_minimo', 70)}): {len(alerts)}")
 
     if not alerts:
         print("\n  No hay chollos esta vez.")

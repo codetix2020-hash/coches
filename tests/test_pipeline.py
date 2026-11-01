@@ -47,7 +47,7 @@ def test_process_demo_data(conn, cfg):
     cfg.setdefault("fuentes", {}).setdefault("demo", {})["activo"] = True
     connector = DemoConnector(cfg)
     listings = list(connector.fetch())
-    assert len(listings) == 25
+    assert len(listings) == 30
 
     alerts_sent = []
     def fake_notifier(channel, res):
@@ -55,7 +55,7 @@ def test_process_demo_data(conn, cfg):
         return True
 
     results = pipeline.process(conn, listings, cfg, notifier=fake_notifier)
-    assert len(results) == 25
+    assert len(results) == 30
 
     # Todos los resultados tienen evaluación
     for r in results:

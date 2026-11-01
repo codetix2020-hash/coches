@@ -103,8 +103,14 @@ class TelegramNotifier:
 
     def _send_raw(self, text: str) -> bool:
         if self.sim:
+            import sys
             ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
-            print(f"\n[SIM Telegram {ts}]\n{text}\n{'─'*60}")
+            out = sys.stdout
+            if hasattr(out, "buffer"):
+                out.buffer.write(f"\n[SIM Telegram {ts}]\n{text}\n{'─'*60}\n".encode("utf-8", errors="replace"))
+                out.buffer.flush()
+            else:
+                print(text.encode("utf-8", errors="replace").decode("ascii", errors="replace"))
             return True
         url = f"https://api.telegram.org/bot{self.token}/sendMessage"
         payload = json.dumps({
