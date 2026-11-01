@@ -1,7 +1,25 @@
+# Secretos y datos locales — NUNCA subir
 .env
 data/*.db
 data/cache/
 data/entrada/
+
+# Entornos Python
+.venv/
 __pycache__/
 *.pyc
-.venv/
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Herramientas
+.ruff_cache/
+*.log
